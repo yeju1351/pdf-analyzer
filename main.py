@@ -7,7 +7,7 @@ import olefile
 import zlib
 
 # 서버의 비밀 공간(secrets)에서 키를 몰래 가져옵니다.
-API_KEY = st.secrets["GOOGLE_API_KEY"]
+API_KEY = st.secrets["AIzaSyDmK3GTgvmA2cupO-FVI1MoUv8wfQR52Cs"]
 genai.configure(api_key=API_KEY)
 
 # 1. PDF 텍스트 추출 함수

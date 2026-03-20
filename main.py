@@ -6,8 +6,9 @@ import io
 import olefile
 import zlib
 
-# 서버의 비밀 공간(secrets)에서 키를 몰래 가져옵니다.
-API_KEY = st.secrets["AIzaSyDmK3GTgvmA2cupO-FVI1MoUv8wfQR52Cs"]
+# 🚨 [매우 중요] 절대 진짜 키를 여기에 직접 적지 마세요!
+# 아래 코드는 스트림릿 서버의 비밀 금고(secrets)에서 키를 안전하게 가져오는 마법의 코드입니다.
+API_KEY = st.secrets["GOOGLE_API_KEY"]
 genai.configure(api_key=API_KEY)
 
 # 1. PDF 텍스트 추출 함수
@@ -51,7 +52,7 @@ def get_text_from_file(file):
     else:
         return ""
 
-# 4. 💡 AI 분석 함수 (표 양식으로 완벽 고정)
+# 4. AI 분석 함수 (표 양식 고정)
 def analyze_text_with_ai(text):
     model = genai.GenerativeModel('gemini-2.5-flash')
     prompt = f"""
@@ -76,7 +77,7 @@ def analyze_text_with_ai(text):
     response = model.generate_content(prompt)
     return response.text
 
-# 5. 💡 워드 파일 생성 함수 (진짜 표 테두리 그리기 기능 추가)
+# 5. 워드 파일 생성 함수 (표 테두리 완벽하게 그리기)
 def create_word_file(result_text):
     doc = Document()
     doc.add_heading('📄 AI 사업 공고 분석 보고서', 0)
@@ -85,18 +86,16 @@ def create_word_file(result_text):
     for line in result_text.split('\n'):
         line = line.strip()
         
-        # 마크다운 표의 구분선(|---|---|)은 워드에서 그릴 필요가 없으므로 무시합니다.
         if line.startswith('|') and line.endswith('|') and '-' in line:
             if line.replace('|', '').replace('-', '').replace(' ', '').replace(':', '') == '':
                 continue
         
-        # 표 데이터 추출 및 워드 표 생성
         if line.startswith('|') and line.endswith('|'):
             row_data = [cell.strip() for cell in line.strip('|').split('|')]
             
             if table is None:
                 table = doc.add_table(rows=1, cols=len(row_data))
-                table.style = 'Table Grid' # 워드 기본 표 테두리 스타일
+                table.style = 'Table Grid' 
                 row_cells = table.rows[0].cells
                 for i in range(len(row_data)):
                     row_cells[i].text = row_data[i]
@@ -121,7 +120,6 @@ st.set_page_config(page_title="AI 공고문 표 분석기", page_icon="📊")
 
 st.title("📊 AI 사업 공고문 표 분석기")
 
-# 💡 동료들을 위한 무료 API 안내 문구 추가
 st.info("🚨 **[이용 안내]** 무료 AI 엔진을 사용 중이므로 한 번에 많은 요청이 몰리면 에러가 뜰 수 있습니다. 에러 발생 시 **1~2분 뒤 새로고침(F5)**하여 다시 시도해 주세요!")
 
 st.write("관련 PDF와 한글(HWP) 파일들을 한 번에 올리면, AI가 핵심 조건을 '표'로 완벽하게 정리해 드립니다!")
@@ -155,7 +153,6 @@ if uploaded_files:
                     mime="text/plain"
                 )
             with col2:
-                # 💡 새로 만든 워드 표 그리기 함수를 연결했습니다.
                 word_data = create_word_file(result)
                 st.download_button(
                     label="📄 워드(.docx)로 표 저장",

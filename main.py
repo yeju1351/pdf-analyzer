@@ -6,8 +6,8 @@ import io
 import olefile
 import zlib
 
-# 🚨 본인의 API 키를 꼭 다시 넣어주세요!
-API_KEY = "AIzaSyDmK3GTgvmA2cupO-FVI1MoUv8wfQR52Cs"
+# 서버의 비밀 공간(secrets)에서 키를 몰래 가져옵니다.
+API_KEY = st.secrets["GOOGLE_API_KEY"]
 genai.configure(api_key=API_KEY)
 
 # 1. PDF 텍스트 추출 함수
@@ -20,33 +20,28 @@ def get_text_from_pdf(file):
                 all_text += extracted + "\n"
     return all_text
 
-# 2. 한글(HWP) 텍스트 추출 함수 (새로 추가됨)
+# 2. 한글(HWP) 텍스트 추출 함수
 def get_text_from_hwp(file):
     try:
         file_bytes = file.read()
         ole = olefile.OleFileIO(file_bytes)
-        
         dirs = ole.listdir()
         valid_dirs = [d for d in dirs if d[0] == "BodyText"]
-        
         text = ""
         for d in valid_dirs:
             stream = ole.openstream(d)
             data = stream.read()
             try:
-                # HWP 내부의 압축된 텍스트를 해독합니다.
                 decoded = zlib.decompress(data, -15)
                 text += decoded.decode('utf-16le', errors='ignore')
             except Exception:
                 pass
-        
-        # 파일 포인터를 다시 처음으로 되돌려 놓습니다.
         file.seek(0)
         return text
     except Exception as e:
         return f"\n[HWP 추출 오류: {e}]\n"
 
-# 3. 파일 종류에 따라 알아서 추출해주는 통합 함수
+# 3. 통합 파일 추출 함수
 def get_text_from_file(file):
     file_name = file.name.lower()
     if file_name.endswith('.pdf'):
@@ -56,10 +51,9 @@ def get_text_from_file(file):
     else:
         return ""
 
+# 4. 💡 AI 분석 함수 (표 양식으로 완벽 고정)
 def analyze_text_with_ai(text):
     model = genai.GenerativeModel('gemini-2.5-flash')
-    
-    # 💡 이 부분의 지시사항을 엑셀 표 스타일로 완벽하게 바꿨습니다!
     prompt = f"""
     다음은 사업 공고문, 세부평가기준, 작성안내서 등의 전체 문서 내용입니다. 
     이 내용을 종합적으로 분석하여, 아래의 [출력 양식]과 완벽하게 동일한 형태의 표(마크다운 Table)로 정리해 주세요.
@@ -82,56 +76,90 @@ def analyze_text_with_ai(text):
     response = model.generate_content(prompt)
     return response.text
 
+# 5. 💡 워드 파일 생성 함수 (진짜 표 테두리 그리기 기능 추가)
 def create_word_file(result_text):
     doc = Document()
-    doc.add_heading('📄 AI 사업 공고 통합 분석 보고서', 0)
-    doc.add_paragraph(result_text)
+    doc.add_heading('📄 AI 사업 공고 분석 보고서', 0)
+    
+    table = None
+    for line in result_text.split('\n'):
+        line = line.strip()
+        
+        # 마크다운 표의 구분선(|---|---|)은 워드에서 그릴 필요가 없으므로 무시합니다.
+        if line.startswith('|') and line.endswith('|') and '-' in line:
+            if line.replace('|', '').replace('-', '').replace(' ', '').replace(':', '') == '':
+                continue
+        
+        # 표 데이터 추출 및 워드 표 생성
+        if line.startswith('|') and line.endswith('|'):
+            row_data = [cell.strip() for cell in line.strip('|').split('|')]
+            
+            if table is None:
+                table = doc.add_table(rows=1, cols=len(row_data))
+                table.style = 'Table Grid' # 워드 기본 표 테두리 스타일
+                row_cells = table.rows[0].cells
+                for i in range(len(row_data)):
+                    row_cells[i].text = row_data[i]
+            else:
+                row_cells = table.add_row().cells
+                for i in range(min(len(row_data), len(row_cells))):
+                    row_cells[i].text = row_data[i]
+        else:
+            table = None 
+            if line:
+                doc.add_paragraph(line)
+                
     bio = io.BytesIO()
     doc.save(bio)
     return bio.getvalue()
 
-# --- 웹 화면(UI) ---
-st.set_page_config(page_title="통합 문서 분석기", page_icon="📚")
+# =====================================================================
+# --- 웹 화면(UI) 구성 ---
+# =====================================================================
 
-st.title("📚 AI 통합 문서 분석기")
-st.write("공고문, 세부지침 등 쪼개져 있는 **PDF와 한글(HWP)** 파일들을 한 번에 올리면 종합 분석해 드립니다!")
+st.set_page_config(page_title="AI 공고문 표 분석기", page_icon="📊")
 
-# 🌟 핵심 변경: type=["pdf", "hwp"] 로 설정하여 두 가지 파일 모두 허용
-uploaded_files = st.file_uploader("관련 파일들을 모두 드래그해서 올려주세요 (PDF, HWP 동시 업로드 가능)", type=["pdf", "hwp"], accept_multiple_files=True)
+st.title("📊 AI 사업 공고문 표 분석기")
+
+# 💡 동료들을 위한 무료 API 안내 문구 추가
+st.info("🚨 **[이용 안내]** 무료 AI 엔진을 사용 중이므로 한 번에 많은 요청이 몰리면 에러가 뜰 수 있습니다. 에러 발생 시 **1~2분 뒤 새로고침(F5)**하여 다시 시도해 주세요!")
+
+st.write("관련 PDF와 한글(HWP) 파일들을 한 번에 올리면, AI가 핵심 조건을 '표'로 완벽하게 정리해 드립니다!")
+
+uploaded_files = st.file_uploader("📂 여기에 파일들을 마우스로 끌어다 놓으세요 (PDF, HWP)", type=["pdf", "hwp"], accept_multiple_files=True)
 
 if uploaded_files:
-    if st.button("🚀 통합 분석 시작"):
+    if st.button("✨ 표 분석 시작하기"):
         
         combined_text = ""
-        
-        with st.spinner('AI가 PDF와 한글(HWP) 문서들을 하나로 취합하여 꼼꼼히 읽고 있습니다... 🧠'):
+        with st.spinner('AI가 열심히 문서를 읽고 표를 그리고 있습니다. 잠시만 기다려주세요... ☕'):
             
-            # 올려준 파일들을 하나씩 확인하며 텍스트를 합칩니다.
             for file in uploaded_files:
                 combined_text += f"\n\n--- [{file.name} 문서 내용] ---\n\n"
                 combined_text += get_text_from_file(file)
             
             result = analyze_text_with_ai(combined_text)
             
-            st.success("✅ 문서 통합 분석이 완료되었습니다!")
+            st.success("🎉 분석이 완료되었습니다! 결과를 확인해 주세요.")
             st.markdown(result)
             
             st.divider()
-            st.subheader("💾 통합 분석 보고서 저장하기")
+            st.subheader("💾 보고서 파일로 다운로드")
             col1, col2 = st.columns(2)
             
             with col1:
                 st.download_button(
                     label="📝 텍스트(.txt)로 저장",
                     data=result,
-                    file_name="사업공고_통합분석.txt",
+                    file_name="공고문_표분석.txt",
                     mime="text/plain"
                 )
             with col2:
+                # 💡 새로 만든 워드 표 그리기 함수를 연결했습니다.
                 word_data = create_word_file(result)
                 st.download_button(
-                    label="📄 워드(.docx)로 저장",
+                    label="📄 워드(.docx)로 표 저장",
                     data=word_data,
-                    file_name="사업공고_통합분석.docx",
+                    file_name="공고문_표분석.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 )
